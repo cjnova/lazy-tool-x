@@ -200,3 +200,4 @@ PR 2 (Recalibrate Vector Contribution) description completed following the 13-se
 
 - `scoreCandidate()` now separates scoring into commented exact-routing, relevance, and preference layers without changing any weights or branch conditions.
 - Exact-routing remains additive and unchanged: canonical exact match still adds `wt.ExactCanonical` with `exact_canonical`, original-name exact still adds `wt.ExactName` with `exact_name`, and substring fallback still stays in the same mutually exclusive chain.
+- Final verification for Task 20 passed on CI run `24258384298` after restoring the branch's empty-query regression expectation so PR 4 returned to a green baseline.
