@@ -56,6 +56,71 @@ func TestSearch_explainScores_populatesBreakdown(t *testing.T) {
 	}
 }
 
+// Key mapping after PR 4 hybrid refactor:
+//   Exact routing layer:  exact_canonical, exact_name, substring
+//   Relevance layer:      lexical, vector
+//   Preference layer:     user_summary, favorite, invocation
+// All prior keys are preserved; no renames. "keyword" key was merged into "lexical" in PR4.
+func TestSearch_explainScores_threeLayerKeys(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "s.db")
+	st, err := storage.OpenSQLite(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	ctx := context.Background()
+
+	rec := models.CapabilityRecord{
+		ID:               "1",
+		Kind:             models.CapabilityKindTool,
+		SourceID:         "gw",
+		SourceType:       "gateway",
+		CanonicalName:    "gw__tool",
+		OriginalName:     "tool",
+		GeneratedSummary: "a useful tool",
+		UserSummary:      "operator-curated useful tool",
+		SearchText:       "gw tool useful",
+		VersionHash:      "v",
+		LastSeenAt:       time.Now(),
+		InputSchemaJSON:  "{}",
+		MetadataJSON:     "{}",
+	}
+	if err := st.UpsertCapability(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(st, nil, embeddings.Noop{}, DefaultScoreWeights(), false)
+	ranked, err := svc.Search(ctx, models.SearchQuery{Text: "gw__tool", Limit: 5, ExplainScores: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ranked.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(ranked.Results))
+	}
+
+	bd := ranked.Results[0].ScoreBreakdown
+	if bd == nil {
+		t.Fatal("no breakdown")
+	}
+	if v := bd["exact_canonical"]; v <= 0 {
+		t.Errorf("expected exact_canonical > 0, got %v: %#v", v, bd)
+	}
+	if _, ok := bd["lexical"]; !ok {
+		t.Errorf("expected lexical key in breakdown: %#v", bd)
+	}
+	if v := bd["user_summary"]; v <= 0 {
+		t.Errorf("expected user_summary > 0, got %v: %#v", v, bd)
+	}
+
+	sum := 0.0
+	for _, v := range bd {
+		sum += v
+	}
+	if math.Abs(sum-ranked.Results[0].Score) > 0.02 {
+		t.Fatalf("breakdown sum %v vs score %v: %#v", sum, ranked.Results[0].Score, bd)
+	}
+}
+
 func TestSearch_explainScores_keywordCapBounded(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "s.db")
 	st, err := storage.OpenSQLite(p)
