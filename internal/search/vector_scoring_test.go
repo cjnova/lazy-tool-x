@@ -13,8 +13,6 @@ import (
 )
 
 func TestVectorInflation(t *testing.T) {
-	t.Skip("demonstrates vector inflation — will pass after normalizeCosine() is thresholded in Task 9")
-
 	ctx := context.Background()
 	st, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "vector-inflation.db"))
 	if err != nil {

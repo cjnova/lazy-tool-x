@@ -90,7 +90,7 @@ func sortedWhy(m map[string]struct{}) []string {
 // normalizeCosine maps chromem similarity from [-1,1] to [0,1].
 func normalizeCosine(v float32) float64 {
 	x := (float64(v) + 1) / 2
-	if x < 0 {
+	if x <= 0.5 {
 		return 0
 	}
 	if x > 1 {
