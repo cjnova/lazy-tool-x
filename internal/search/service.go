@@ -221,14 +221,21 @@ func scoreCandidate(rec *models.CapabilityRecord, needle string, tokens []string
 
 	// === Relevance Layer ===
 	// Lexical and vector signals contribute to hybrid relevance.
+	const maxLexicalPts = 20.0
 	ls, wLex := scoreLexical(needle, tokens, rec)
-	sc += ls
-	addBD("lexical", ls)
+	normLex := ls / maxLexicalPts
+	if normLex > 1 {
+		normLex = 1
+	}
+	lexPts := normLex * wt.VectorMultiplier / 2
+	sc += lexPts
+	addBD("lexical", lexPts)
 	why = mergeWhyUnique(why, wLex)
+	var vecPts float64
 	if vecHits != nil {
 		if v, ok := vecHits[rec.ID]; ok {
 			nv := normalizeCosine(v)
-			vecPts := nv * wt.VectorMultiplier
+			vecPts = nv * wt.VectorMultiplier / 2
 			sc += vecPts
 			addBD("vector", vecPts)
 			why = append(why, "vector:similarity")
