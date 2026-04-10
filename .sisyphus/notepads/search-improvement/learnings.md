@@ -186,3 +186,9 @@ PR 2 (Recalibrate Vector Contribution) description completed following the 13-se
 - Added `softened_fts_long_query_skips_substring` to the existing `TestSearch_candidatePath_substringMatrix` rows slice.
 - Introduced per-row `limit` support so the new case can use `Limit: 1` without changing the other matrix entries.
 - The new fixture keeps the `office__word_from_markdown` hit on the softened FTS anchor path, so the top result remains stable while `SubstringSkippedFTSHit` is asserted.
+## [2026-04-10] Task: 17
+- PR 3 ready, CI green
+
+## [2026-04-10] Task: 18
+- Added a top-3 regression anchor test in `internal/search/e2e_test.go` using `capRec()` fixtures and `DefaultScoreWeights()` to lock current ordering for exact, paraphrase, conversational, parameter, and ambiguous queries.
+- Kept assertions behavior-based by checking only relative ordering and top-hit `ProxyToolName`, with no score comparisons.

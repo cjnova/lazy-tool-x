@@ -54,6 +54,102 @@ func TestService_Search_hybridLexical(t *testing.T) {
 	}
 }
 
+func TestRegressionAnchorTop3(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		wantTop string
+		records []models.CapabilityRecord
+	}{
+		{
+			name:    "exact_routing_office_word_from_markdown",
+			query:   "office__word_from_markdown",
+			wantTop: "office__word_from_markdown",
+			records: []models.CapabilityRecord{
+				capRec("word-exact", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document populated from Markdown summary content.", "office word_from_markdown create document markdown summary"),
+				capRec("word-weak", "office__word_template_placeholders", "word_template_placeholders", "Inspects Word templates and placeholders.", "office word_template_placeholders inspect template placeholders word"),
+				capRec("ppt-weak", "office__read_powerpoint_speaker_notes", "read_powerpoint_speaker_notes", "Reads speaker notes from PowerPoint.", "office powerpoint speaker notes read deck slides"),
+			},
+		},
+		{
+			name:    "paraphrase_word_from_markdown",
+			query:   "create a new Word document populated with a summary of this conversation",
+			wantTop: "office__word_from_markdown",
+			records: []models.CapabilityRecord{
+				capRec("word-paraphrase", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.", "office word_from_markdown creates new word document populated summary conversation markdown report notes"),
+				capRec("docs-paraphrase", "docs__read_document_fully", "read_document_fully", "Reads a document end to end.", "docs read document fully content"),
+			},
+		},
+		{
+			name:    "conversational_firewall_premium_price",
+			query:   "firewall premium price",
+			wantTop: "azure__firewall_premium_price",
+			records: []models.CapabilityRecord{
+				capRec("az-firewall", "azure__firewall_premium_price", "firewall_premium_price", "Returns Azure firewall premium pricing.", "azure firewall premium price security tier"),
+				capRec("az-prices", "azure__azure_query_prices", "azure_query_prices", "Queries cached Azure pricing by service sku and region.", "azure query prices service sku region quantity cached pricing"),
+			},
+		},
+		{
+			name:    "parameter_service_sku_region_quantity",
+			query:   "service sku region quantity",
+			wantTop: "azure__azure_query_prices",
+			records: []models.CapabilityRecord{
+				capRec("az-prices", "azure__azure_query_prices", "azure_query_prices", "Queries cached Azure service pricing by sku, region, and quantity.", "azure azure_query_prices service sku region quantity price cached"),
+				capRec("az-firewall", "azure__firewall_premium_price", "firewall_premium_price", "Returns Azure firewall premium pricing.", "azure firewall premium price security tier"),
+			},
+		},
+		{
+			name:    "ambiguous_speaker_notes_powerpoint",
+			query:   "speaker notes powerpoint",
+			wantTop: "office__read_powerpoint_speaker_notes",
+			records: []models.CapabilityRecord{
+				capRec("ppt-speak", "office__read_powerpoint_speaker_notes", "read_powerpoint_speaker_notes", "Reads speaker notes from a PowerPoint deck.", "office powerpoint speaker notes read deck slides"),
+				capRec("word-summary", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown input.", "office word_from_markdown markdown summary report"),
+				capRec("docs-read", "docs__read_document_fully", "read_document_fully", "Reads a document end to end.", "docs read document fully content"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "s.db")
+			st, err := storage.OpenSQLite(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = st.Close() }()
+
+			ctx := context.Background()
+			for _, rec := range tc.records {
+				if err := st.UpsertCapability(ctx, rec); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			svc := NewService(st, nil, embeddings.Noop{}, DefaultScoreWeights(), false)
+			out, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(out.Results) < 1 {
+				t.Fatal("no results")
+			}
+			if out.Results[0].ProxyToolName != tc.wantTop {
+				t.Fatalf("expected %s first, got %+v", tc.wantTop, out.Results)
+			}
+
+			if tc.name == "exact_routing_office_word_from_markdown" {
+				if len(out.Results) < 2 {
+					t.Fatalf("expected a weaker match behind exact hit, got %+v", out.Results)
+				}
+				if out.Results[1].ProxyToolName == tc.wantTop {
+					t.Fatalf("expected weaker match below exact hit, got %+v", out.Results)
+				}
+			}
+		})
+	}
+}
+
 func TestService_Search_exactCanonicalBeatsWeakerMatch(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "s.db")
 	st, err := storage.OpenSQLite(p)
