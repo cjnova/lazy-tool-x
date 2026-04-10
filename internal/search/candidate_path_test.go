@@ -17,6 +17,7 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 		name    string
 		query   string
 		want    string
+		limit   int
 		fixture models.CapabilityRecord
 	}
 	rows := []row{
@@ -64,6 +65,19 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
 				GeneratedSummary: "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.",
 				SearchText:       "office word_from_markdown creates a new word document populated from markdown summary conversation summary notes report content",
+				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
+			},
+		},
+		{
+			name:  "softened_fts_long_query_skips_substring",
+			query: "create word document from conversation notes",
+			want:  models.SearchCandidatePathSubstringSkippedFTSHit,
+			limit: 1,
+			fixture: models.CapabilityRecord{
+				ID: "5", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
+				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
+				GeneratedSummary: "Create a Word document from conversation notes.",
+				SearchText:       "office create word document from conversation notes",
 				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
 			},
 		},
@@ -134,11 +148,20 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 				t.Fatal(err)
 			}
 			svc := NewService(st, nil, embeddings.Noop{}, ScoreWeights{}, false)
-			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: 5})
+			limit := 5
+			if tc.limit > 0 {
+				limit = tc.limit
+			}
+			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: limit})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if tc.name == "conversational_query_uses_fts_sparse_augment" {
+				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
+					t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
+				}
+			}
+			if tc.name == "softened_fts_long_query_skips_substring" {
 				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
 					t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
 				}
