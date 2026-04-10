@@ -17,6 +17,7 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 		name    string
 		query   string
 		want    string
+		limit   int
 		fixture models.CapabilityRecord
 	}
 	rows := []row{
@@ -56,14 +57,27 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 			},
 		},
 		{
-			name:  "conversational_query_uses_zero_row_fallback",
+			name:  "conversational_query_uses_fts_sparse_augment",
 			query: "create a new Word document populated with a summary of this conversation",
-			want:  models.SearchCandidatePathSubstringFullCatalogFTSZeroRows,
+			want:  models.SearchCandidatePathSubstringAugmentedFTSSparse,
 			fixture: models.CapabilityRecord{
 				ID: "4", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
 				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
 				GeneratedSummary: "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.",
 				SearchText:       "office word_from_markdown creates a new word document populated from markdown summary conversation summary notes report content",
+				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
+			},
+		},
+		{
+			name:  "softened_fts_long_query_skips_substring",
+			query: "create word document from conversation notes",
+			want:  models.SearchCandidatePathSubstringSkippedFTSHit,
+			limit: 1,
+			fixture: models.CapabilityRecord{
+				ID: "5", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
+				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
+				GeneratedSummary: "Create a Word document from conversation notes.",
+				SearchText:       "office create word document from conversation notes",
 				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
 			},
 		},
@@ -134,11 +148,20 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 				t.Fatal(err)
 			}
 			svc := NewService(st, nil, embeddings.Noop{}, ScoreWeights{}, false)
-			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: 5})
+			limit := 5
+			if tc.limit > 0 {
+				limit = tc.limit
+			}
+			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: limit})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.name == "conversational_query_uses_zero_row_fallback" {
+			if tc.name == "conversational_query_uses_fts_sparse_augment" {
+				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
+					t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
+				}
+			}
+			if tc.name == "softened_fts_long_query_skips_substring" {
 				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
 					t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
 				}
@@ -148,6 +171,76 @@ func TestSearch_candidatePath_substringMatrix(t *testing.T) {
 			}
 			if ranked.CandidatePath != tc.want {
 				t.Fatalf("RankedResults.CandidatePath: got %q want %q", ranked.CandidatePath, tc.want)
+			}
+		})
+	}
+}
+
+func TestSearch_candidatePath_fallbackChain(t *testing.T) {
+	type row struct {
+		name    string
+		query   string
+		want    string
+		wantTop string
+		fixture models.CapabilityRecord
+	}
+	rows := []row{
+		{
+			name:  "fts_sparse_augment_recovers_compact_search_text",
+			query: "conversation summary word document the",
+			want:  models.SearchCandidatePathSubstringAugmentedFTSSparse,
+			wantTop: "office__word_from_markdown",
+			fixture: models.CapabilityRecord{
+				ID: "6", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
+				CanonicalName: "office__word_from_markdown", OriginalName: "word_from_markdown",
+				GeneratedSummary: "Creates Word documents from conversation notes.",
+				SearchText:       "conversationsummaryworddocument",
+				VersionHash:      "1", LastSeenAt: time.Now(), InputSchemaJSON: "{}", MetadataJSON: "{}",
+			},
+		},
+	}
+
+	for _, tc := range rows {
+		t.Run(tc.name, func(t *testing.T) {
+			var mode string
+			prev := metrics.SearchCandidateGeneration
+			metrics.SearchCandidateGeneration = func(m string) { mode = m }
+			defer func() { metrics.SearchCandidateGeneration = prev }()
+
+			p := filepath.Join(t.TempDir(), "fallback.db")
+			st, err := storage.OpenSQLite(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = st.Close() }()
+
+			ctx := context.Background()
+			rec := tc.fixture
+			if rec.InputSchemaJSON == "" {
+				rec.InputSchemaJSON = "{}"
+			}
+			if rec.MetadataJSON == "" {
+				rec.MetadataJSON = "{}"
+			}
+			if err := st.UpsertCapability(ctx, rec); err != nil {
+				t.Fatal(err)
+			}
+
+			svc := NewService(st, nil, embeddings.Noop{}, ScoreWeights{}, false)
+			ranked, err := svc.Search(ctx, models.SearchQuery{Text: tc.query, Limit: 5})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode != tc.want {
+				t.Fatalf("metrics path: got %q want %q", mode, tc.want)
+			}
+			if ranked.CandidatePath != tc.want {
+				t.Fatalf("RankedResults.CandidatePath: got %q want %q", ranked.CandidatePath, tc.want)
+			}
+			if tc.wantTop != "" {
+				if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != tc.wantTop {
+					t.Fatalf("expected %s top hit, got %#v", tc.wantTop, ranked.Results)
+				}
 			}
 		})
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -75,17 +76,55 @@ func ftsQuoteToken(t string) string {
 	return `"` + t + `"`
 }
 
-// BuildFTSMatchQuery returns an FTS5 MATCH string (token AND ...), or "" if nothing to match.
+type ftsTokenChoice struct {
+	idx int
+	tok string
+}
+
+// BuildFTSMatchQuery returns an FTS5 MATCH string, or "" if nothing to match.
 func BuildFTSMatchQuery(query string) string {
 	toks := ftsTokenize(query)
 	if len(toks) == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(toks))
-	for _, t := range toks {
-		parts = append(parts, ftsQuoteToken(t))
+	if len(toks) <= 3 {
+		parts := make([]string, 0, len(toks))
+		for _, t := range toks {
+			parts = append(parts, ftsQuoteToken(t))
+		}
+		return strings.Join(parts, " AND ")
 	}
-	return strings.Join(parts, " AND ")
+
+	choices := make([]ftsTokenChoice, 0, len(toks))
+	for idx, tok := range toks {
+		choices = append(choices, ftsTokenChoice{idx: idx, tok: tok})
+	}
+	sort.SliceStable(choices, func(i, j int) bool {
+		return len(choices[i].tok) > len(choices[j].tok)
+	})
+
+	anchor := choices[:3]
+	sort.Slice(anchor, func(i, j int) bool {
+		return anchor[i].idx < anchor[j].idx
+	})
+	anchorIdx := make(map[int]struct{}, len(anchor))
+	anchorParts := make([]string, 0, len(anchor))
+	for _, choice := range anchor {
+		anchorIdx[choice.idx] = struct{}{}
+		anchorParts = append(anchorParts, ftsQuoteToken(choice.tok))
+	}
+
+	optionalParts := make([]string, 0, len(toks)-len(anchor))
+	for idx, tok := range toks {
+		if _, ok := anchorIdx[idx]; ok {
+			continue
+		}
+		optionalParts = append(optionalParts, ftsQuoteToken(tok))
+	}
+
+	parts := []string{"(" + strings.Join(anchorParts, " AND ") + ")"}
+	parts = append(parts, optionalParts...)
+	return strings.Join(parts, " OR ")
 }
 
 func syncFTSRow(ctx context.Context, tx *sql.Tx, rec models.CapabilityRecord) error {

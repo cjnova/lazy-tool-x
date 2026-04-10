@@ -424,6 +424,10 @@ func (s *Service) buildCandidates(ctx context.Context, q models.SearchQuery, nee
 	if err != nil {
 		return nil, "", err
 	}
+	// Keep token conjunction as the final lexical fallback. Softened long-query FTS now
+	// usually yields sparse anchor hits, and the full-catalog substring pass can recover
+	// compact/near matches from those conversational queries before we narrow the search
+	// again with conjunction tokens.
 	if len(subIDs) == 0 && len(ftsIDs) == 0 {
 		fallbackTokens := fallbackConjunctionTokens(tokens)
 		if len(fallbackTokens) > 0 {
