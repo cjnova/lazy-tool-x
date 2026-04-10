@@ -163,9 +163,9 @@ func TestSearch_candidatePath_fallbackChain(t *testing.T) {
 	}
 	rows := []row{
 		{
-			name:  "token_conjunction_fallback_recovers_compact_search_text",
+			name:  "fts_sparse_augment_recovers_compact_search_text",
 			query: "conversation summary word document the",
-			want:  models.SearchCandidatePathSubstringFullCatalogFTSZeroRows,
+			want:  models.SearchCandidatePathSubstringAugmentedFTSSparse,
 			wantTop: "office__word_from_markdown",
 			fixture: models.CapabilityRecord{
 				ID: "6", Kind: models.CapabilityKindTool, SourceID: "office", SourceType: "server",
