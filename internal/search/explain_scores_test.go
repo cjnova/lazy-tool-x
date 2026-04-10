@@ -10,7 +10,6 @@ import (
 
 	"lazy-tool/internal/embeddings"
 	"lazy-tool/internal/storage"
-	"lazy-tool/internal/vector"
 	"lazy-tool/pkg/models"
 )
 
@@ -140,21 +139,17 @@ func TestSearch_explainScores_keywordCapBounded(t *testing.T) {
 }
 
 func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
-	ctx := context.Background()
-	st, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "vector-threshold.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = st.Close() }()
+	// Directly exercise scoreCandidate with pre-built vecHits to verify normalizeCosine
+	// threshold behavior: strong match (cosine≈1) → vector breakdown > 0;
+	// neutral match (cosine=0) → vector breakdown absent / ≈ 0.
+	wt := DefaultScoreWeights()
+	needle := "match"
+	tokens := []string{"match"}
 
-	idx, err := vector.NewInMemory()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = idx.Close() }()
-
-	toolStrong := models.CapabilityRecord{
-		ID:               "strong",
+	// Strong: vecHits keyed by rec.ID with similarity=1.0
+	// normalizeCosine(1.0) = 1.0 > threshold (0.5) → vecPts = 1.0 * VectorMultiplier > 0
+	strong := models.CapabilityRecord{
+		ID:               "id-strong",
 		Kind:             models.CapabilityKindTool,
 		SourceID:         "src",
 		SourceType:       "gateway",
@@ -164,13 +159,14 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		SearchText:       "match tool strong",
 		VersionHash:      "v1",
 		LastSeenAt:       time.Now().UTC(),
-		EmbeddingModel:   "test",
-		EmbeddingVector:  []float32{1, 0, 0, 0},
 		InputSchemaJSON:  "{}",
 		MetadataJSON:     "{}",
 	}
-	toolNeutral := models.CapabilityRecord{
-		ID:               "neutral",
+
+	// Neutral: vecHits keyed by rec.ID with similarity=0.0
+	// normalizeCosine(0.0) = x=0.5 → x<=0.5 → returns 0 → no vector pts
+	neutral := models.CapabilityRecord{
+		ID:               "id-neutral",
 		Kind:             models.CapabilityKindTool,
 		SourceID:         "src2",
 		SourceType:       "gateway",
@@ -180,41 +176,19 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		SearchText:       "match tool neutral",
 		VersionHash:      "v2",
 		LastSeenAt:       time.Now().UTC(),
-		EmbeddingModel:   "test",
-		EmbeddingVector:  []float32{0, 1, 0, 0},
 		InputSchemaJSON:  "{}",
 		MetadataJSON:     "{}",
 	}
 
-	for _, rec := range []models.CapabilityRecord{toolStrong, toolNeutral} {
-		if err := st.UpsertCapability(ctx, rec); err != nil {
-			t.Fatal(err)
-		}
+	vecHits := map[string]float32{
+		"id-strong":  1.0,
+		"id-neutral": 0.0,
 	}
-	if err := idx.RebuildFromRecords(ctx, []models.CapabilityRecord{toolStrong, toolNeutral}); err != nil {
-		t.Fatal(err)
-	}
+	q := models.SearchQuery{ExplainScores: true}
 
-	svc := NewService(st, idx, embeddings.Noop{}, DefaultScoreWeights(), false)
-	out, err := svc.Search(ctx, models.SearchQuery{
-		Text:          "match",
-		Limit:         5,
-		HasEmbedding:  true,
-		Embedding:     []float32{1, 0, 0, 0},
-		ExplainScores: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	byName := map[string]models.SearchResult{}
-	for _, r := range out.Results {
-		byName[r.ProxyToolName] = r
-	}
-
-	strongRes, ok := byName[toolStrong.CanonicalName]
+	strongRes, ok := scoreCandidate(&strong, needle, tokens, vecHits, wt, q)
 	if !ok {
-		t.Fatal("strong match tool not in results")
+		t.Fatal("strong result was filtered out")
 	}
 	if strongRes.ScoreBreakdown == nil {
 		t.Fatal("strong result has no score breakdown")
@@ -223,9 +197,14 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		t.Fatalf("expected strong vector contribution > 0, got %v: %#v", v, strongRes.ScoreBreakdown)
 	}
 
-	if neutralRes, ok := byName[toolNeutral.CanonicalName]; ok {
-		if v, exists := neutralRes.ScoreBreakdown["vector"]; exists && math.Abs(v) > 0.001 {
-			t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutralRes.ScoreBreakdown)
-		}
+	neutralRes, ok := scoreCandidate(&neutral, needle, tokens, vecHits, wt, q)
+	if !ok {
+		t.Fatal("neutral result was filtered out")
+	}
+	if neutralRes.ScoreBreakdown == nil {
+		t.Fatal("neutral result has no score breakdown")
+	}
+	if v, exists := neutralRes.ScoreBreakdown["vector"]; exists && math.Abs(v) > 0.001 {
+		t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutralRes.ScoreBreakdown)
 	}
 }
