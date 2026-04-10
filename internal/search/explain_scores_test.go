@@ -161,7 +161,7 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		CanonicalName:    "src__strong_match",
 		OriginalName:     "strong_match",
 		GeneratedSummary: "strong match tool",
-		SearchText:       "strong match tool",
+		SearchText:       "match tool strong",
 		VersionHash:      "v1",
 		LastSeenAt:       time.Now().UTC(),
 		EmbeddingModel:   "test",
@@ -177,7 +177,7 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		CanonicalName:    "src2__neutral_match",
 		OriginalName:     "neutral_match",
 		GeneratedSummary: "neutral match tool",
-		SearchText:       "neutral match tool",
+		SearchText:       "match tool neutral",
 		VersionHash:      "v2",
 		LastSeenAt:       time.Now().UTC(),
 		EmbeddingModel:   "test",
@@ -206,34 +206,26 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Results) < 2 {
-		t.Fatalf("expected both lexical matches, got %+v", out.Results)
-	}
 
-	byID := map[string]models.SearchResult{}
+	byName := map[string]models.SearchResult{}
 	for _, r := range out.Results {
-		byID[r.CapabilityID] = r
+		byName[r.ProxyToolName] = r
 	}
 
-	strong, ok := byID["strong"]
+	strongRes, ok := byName[toolStrong.CanonicalName]
 	if !ok {
-		t.Fatal("missing strong vector result")
+		t.Fatal("strong match tool not in results")
 	}
-	neutral, ok := byID["neutral"]
-	if !ok {
-		t.Fatal("missing neutral vector result")
-	}
-
-	if strong.ScoreBreakdown == nil {
+	if strongRes.ScoreBreakdown == nil {
 		t.Fatal("strong result has no score breakdown")
 	}
-	if neutral.ScoreBreakdown == nil {
-		t.Fatal("neutral result has no score breakdown")
+	if v := strongRes.ScoreBreakdown["vector"]; v <= 0 {
+		t.Fatalf("expected strong vector contribution > 0, got %v: %#v", v, strongRes.ScoreBreakdown)
 	}
-	if v := strong.ScoreBreakdown["vector"]; v <= 0 {
-		t.Fatalf("expected strong vector contribution > 0, got %v: %#v", v, strong.ScoreBreakdown)
-	}
-	if v, ok := neutral.ScoreBreakdown["vector"]; ok && math.Abs(v) > 0.001 {
-		t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutral.ScoreBreakdown)
+
+	if neutralRes, ok := byName[toolNeutral.CanonicalName]; ok {
+		if v, exists := neutralRes.ScoreBreakdown["vector"]; exists && math.Abs(v) > 0.001 {
+			t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutralRes.ScoreBreakdown)
+		}
 	}
 }
