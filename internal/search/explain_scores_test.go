@@ -137,3 +137,74 @@ func TestSearch_explainScores_keywordCapBounded(t *testing.T) {
 		t.Fatalf("keyword breakdown should be bounded: single=%#v repeated=%#v", single.ScoreBreakdown, repeated.ScoreBreakdown)
 	}
 }
+
+func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
+	// Directly exercise scoreCandidate with pre-built vecHits to verify normalizeCosine
+	// threshold behavior: strong match (cosine≈1) → vector breakdown > 0;
+	// neutral match (cosine=0) → vector breakdown absent / ≈ 0.
+	wt := DefaultScoreWeights()
+	needle := "match"
+	tokens := []string{"match"}
+
+	// Strong: vecHits keyed by rec.ID with similarity=1.0
+	// normalizeCosine(1.0) = 1.0 > threshold (0.5) → vecPts = 1.0 * VectorMultiplier > 0
+	strong := models.CapabilityRecord{
+		ID:               "id-strong",
+		Kind:             models.CapabilityKindTool,
+		SourceID:         "src",
+		SourceType:       "gateway",
+		CanonicalName:    "src__strong_match",
+		OriginalName:     "strong_match",
+		GeneratedSummary: "strong match tool",
+		SearchText:       "match tool strong",
+		VersionHash:      "v1",
+		LastSeenAt:       time.Now().UTC(),
+		InputSchemaJSON:  "{}",
+		MetadataJSON:     "{}",
+	}
+
+	// Neutral: vecHits keyed by rec.ID with similarity=0.0
+	// normalizeCosine(0.0) = x=0.5 → x<=0.5 → returns 0 → no vector pts
+	neutral := models.CapabilityRecord{
+		ID:               "id-neutral",
+		Kind:             models.CapabilityKindTool,
+		SourceID:         "src2",
+		SourceType:       "gateway",
+		CanonicalName:    "src2__neutral_match",
+		OriginalName:     "neutral_match",
+		GeneratedSummary: "neutral match tool",
+		SearchText:       "match tool neutral",
+		VersionHash:      "v2",
+		LastSeenAt:       time.Now().UTC(),
+		InputSchemaJSON:  "{}",
+		MetadataJSON:     "{}",
+	}
+
+	vecHits := map[string]float32{
+		"id-strong":  1.0,
+		"id-neutral": 0.0,
+	}
+	q := models.SearchQuery{ExplainScores: true}
+
+	strongRes, ok := scoreCandidate(&strong, needle, tokens, vecHits, wt, q)
+	if !ok {
+		t.Fatal("strong result was filtered out")
+	}
+	if strongRes.ScoreBreakdown == nil {
+		t.Fatal("strong result has no score breakdown")
+	}
+	if v := strongRes.ScoreBreakdown["vector"]; v <= 0 {
+		t.Fatalf("expected strong vector contribution > 0, got %v: %#v", v, strongRes.ScoreBreakdown)
+	}
+
+	neutralRes, ok := scoreCandidate(&neutral, needle, tokens, vecHits, wt, q)
+	if !ok {
+		t.Fatal("neutral result was filtered out")
+	}
+	if neutralRes.ScoreBreakdown == nil {
+		t.Fatal("neutral result has no score breakdown")
+	}
+	if v, exists := neutralRes.ScoreBreakdown["vector"]; exists && math.Abs(v) > 0.001 {
+		t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutralRes.ScoreBreakdown)
+	}
+}
