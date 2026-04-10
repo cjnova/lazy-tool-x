@@ -11,12 +11,10 @@ import (
 	"lazy-tool/pkg/models"
 )
 
-// TestInflationKeywordRepetition demonstrates keyword score inflation.
-// A tool with a repetitive keyword-heavy summary incorrectly outranks a concise,
-// more relevant tool. This test is skipped until keywordScore() is capped in Task 4.
+// TestInflationKeywordRepetition verifies capped keyword scoring.
+// A tool with a repetitive keyword-heavy summary must not outrank a concise,
+// more relevant tool just because the same token appears repeatedly.
 func TestInflationKeywordRepetition(t *testing.T) {
-	t.Skip("demonstrates keyword inflation — will pass after keywordScore() is capped in Task 4")
-
 	p := filepath.Join(t.TempDir(), "s.db")
 	st, err := storage.OpenSQLite(p)
 	if err != nil {

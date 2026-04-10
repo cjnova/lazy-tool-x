@@ -79,14 +79,13 @@ func TestKeywordScore_cases(t *testing.T) {
 	}
 }
 
-// TestKeywordScore_repetitionInflation documents that the current keywordScore
-// is unbounded — repeated tokens inflate the score linearly. This will change
-// after Task 4 caps the contribution.
+// TestKeywordScore_repetitionInflation documents capped keyword scoring:
+// repeated tokens should not grow linearly once a token is already present.
 func TestKeywordScore_repetitionInflation(t *testing.T) {
 	once := keywordScore("the word create appears here", []string{"create"})
 	five := keywordScore("create create create create create appears here", []string{"create"})
-	if five <= once {
-		t.Fatalf("expected repeated token to score higher (current behavior): once=%v five=%v", once, five)
+	if five > once {
+		t.Fatalf("expected repeated token to be capped: once=%v five=%v", once, five)
 	}
 }
 
