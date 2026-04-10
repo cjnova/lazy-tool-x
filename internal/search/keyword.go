@@ -37,12 +37,11 @@ func keywordScore(searchText string, tokens []string) float64 {
 		if len(t) < 2 {
 			continue
 		}
-		c := strings.Count(searchText, t)
-		if c > 0 {
-			score += float64(c) * (1 + 0.1*float64(len(t)))
+		if strings.Count(searchText, t) > 0 {
+			score += 1 + 0.1*float64(len(t))
 		}
 	}
-	return score
+	return score / float64(len(tokens))
 }
 
 func fallbackConjunctionTokens(tokens []string) []string {
