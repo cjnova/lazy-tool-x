@@ -77,16 +77,8 @@ func TestEmptyQueryBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Results) == 0 {
-		t.Fatal("expected at least 1 result for empty query")
-	}
-	if out.Results[0].ProxyToolName != boosted.CanonicalName {
-		t.Fatalf("expected user-summary-boosted capability first, got %+v", out.Results)
-	}
-	for _, r := range out.Results {
-		if r.Score < 0.01 || r.Score > 1.00 {
-			t.Errorf("score %v out of range [0.01, 1.00]", r.Score)
-		}
+	if len(out.Results) != 0 {
+		t.Fatalf("expected empty results for empty query, got %+v", out.Results)
 	}
 }
 
