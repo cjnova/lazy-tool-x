@@ -22,3 +22,12 @@ b.sh
 .DS_Store
 .claude
 *.patch
+
+# Local-only knowledge base and working docs
+AGENTS.md
+**/AGENTS.md
+docs/hybrid-scoring-proposal.md
+docs/search-improvement-engineering-summary.md
+docs/search-improvement-pr-roadmap.md
+docs/search-improvement-pr-schema.md
+.sisyphus/

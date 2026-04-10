@@ -200,6 +200,9 @@ func scoreCandidate(rec *models.CapabilityRecord, needle string, tokens []string
 		}
 		bd[key] += delta
 	}
+
+	// === Exact Routing Layer ===
+	// Exact matches dominate all other signals. These are precision anchors.
 	if needle != "" {
 		if rec.CanonicalName == needle {
 			sc += wt.ExactCanonical
@@ -215,19 +218,32 @@ func scoreCandidate(rec *models.CapabilityRecord, needle string, tokens []string
 			why = append(why, "text:substring")
 		}
 	}
+
+	// === Relevance Layer ===
+	// Lexical and vector signals contribute to hybrid relevance.
+	const maxLexicalPts = 20.0
 	ls, wLex := scoreLexical(needle, tokens, rec)
-	sc += ls
-	addBD("lexical", ls)
+	normLex := ls / maxLexicalPts
+	if normLex > 1 {
+		normLex = 1
+	}
+	lexPts := normLex * wt.VectorMultiplier / 2
+	sc += lexPts
+	addBD("lexical", lexPts)
 	why = mergeWhyUnique(why, wLex)
+	var vecPts float64
 	if vecHits != nil {
 		if v, ok := vecHits[rec.ID]; ok {
 			nv := normalizeCosine(v)
-			vecPts := nv * wt.VectorMultiplier
+			vecPts = nv * wt.VectorMultiplier / 2
 			sc += vecPts
 			addBD("vector", vecPts)
 			why = append(why, "vector:similarity")
 		}
 	}
+
+	// === Preference Layer ===
+	// Small boosts for user-curated and usage signals.
 	if u, wu := userSummaryWeight(wt, rec); u > 0 {
 		sc += u
 		addBD("user_summary", u)
