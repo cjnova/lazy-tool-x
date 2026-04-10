@@ -10,6 +10,7 @@ import (
 
 	"lazy-tool/internal/embeddings"
 	"lazy-tool/internal/storage"
+	"lazy-tool/internal/vector"
 	"lazy-tool/pkg/models"
 )
 
@@ -135,5 +136,105 @@ func TestSearch_explainScores_keywordCapBounded(t *testing.T) {
 	}
 	if math.Abs(getKeyword(repeated.ScoreBreakdown)-getKeyword(single.ScoreBreakdown)) > 0.02 {
 		t.Fatalf("keyword breakdown should be bounded: single=%#v repeated=%#v", single.ScoreBreakdown, repeated.ScoreBreakdown)
+	}
+}
+
+func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
+	ctx := context.Background()
+	st, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "vector-threshold.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+
+	idx, err := vector.NewInMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+
+	queryVec := []float32{1, 0, 0, 0}
+	toolStrong := models.CapabilityRecord{
+		ID:               "strong",
+		Kind:             models.CapabilityKindTool,
+		SourceID:         "src",
+		SourceType:       "gateway",
+		CanonicalName:    "src__strong_match",
+		OriginalName:     "strong_match",
+		GeneratedSummary: "strong match tool",
+		SearchText:       "strong match tool",
+		VersionHash:      "v1",
+		LastSeenAt:       time.Now().UTC(),
+		EmbeddingModel:   "test",
+		EmbeddingVector:  []float32{1, 0, 0, 0},
+		InputSchemaJSON:  "{}",
+		MetadataJSON:     "{}",
+	}
+	toolNeutral := models.CapabilityRecord{
+		ID:               "neutral",
+		Kind:             models.CapabilityKindTool,
+		SourceID:         "src2",
+		SourceType:       "gateway",
+		CanonicalName:    "src2__neutral_match",
+		OriginalName:     "neutral_match",
+		GeneratedSummary: "neutral match tool",
+		SearchText:       "neutral match tool",
+		VersionHash:      "v2",
+		LastSeenAt:       time.Now().UTC(),
+		EmbeddingModel:   "test",
+		EmbeddingVector:  []float32{0, 1, 0, 0},
+		InputSchemaJSON:  "{}",
+		MetadataJSON:     "{}",
+	}
+
+	for _, rec := range []models.CapabilityRecord{toolStrong, toolNeutral} {
+		if err := st.UpsertCapability(ctx, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := idx.RebuildFromRecords(ctx, []models.CapabilityRecord{toolStrong, toolNeutral}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(st, idx, embeddings.Noop{}, DefaultScoreWeights(), false)
+	out, err := svc.Search(ctx, models.SearchQuery{
+		Text:          "match",
+		Limit:         5,
+		HasEmbedding:  true,
+		Embedding:     queryVec,
+		ExplainScores: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Results) < 2 {
+		t.Fatalf("expected both lexical matches, got %+v", out.Results)
+	}
+
+	byID := map[string]models.SearchResult{}
+	for _, r := range out.Results {
+		byID[r.CapabilityID] = r
+	}
+
+	strong, ok := byID["strong"]
+	if !ok {
+		t.Fatal("missing strong vector result")
+	}
+	neutral, ok := byID["neutral"]
+	if !ok {
+		t.Fatal("missing neutral vector result")
+	}
+
+	if strong.ScoreBreakdown == nil {
+		t.Fatal("strong result has no score breakdown")
+	}
+	if neutral.ScoreBreakdown == nil {
+		t.Fatal("neutral result has no score breakdown")
+	}
+	if v := strong.ScoreBreakdown["vector"]; v <= 0 {
+		t.Fatalf("expected strong vector contribution > 0, got %v: %#v", v, strong.ScoreBreakdown)
+	}
+	if v := neutral.ScoreBreakdown["vector"]; math.Abs(v) > 0.001 {
+		t.Fatalf("expected neutral vector contribution near 0, got %v: %#v", v, neutral.ScoreBreakdown)
 	}
 }
