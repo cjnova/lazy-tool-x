@@ -77,7 +77,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "create a new Word document populated with a summary of this conversation",
 			wantTop: "office__word_from_markdown",
 			records: []models.CapabilityRecord{
-				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.", "office word_from_markdown summary conversation markdown report"),
+				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document populated from Markdown summary, conversation summary, notes, or report content.", "office word_from_markdown creates new word document populated summary conversation markdown report notes"),
 				capRec("word2", "office__read_powerpoint_speaker_notes", "read_powerpoint_speaker_notes", "Reads speaker notes from a PowerPoint deck.", "office powerpoint speaker notes read deck slides"),
 			},
 		},
@@ -95,7 +95,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "calculate azure vm monthly cost from cached prices",
 			wantTop: "azure__azure_query_prices",
 			records: []models.CapabilityRecord{
-				capRec("az1", "azure__azure_query_prices", "azure_query_prices", "Calculates Azure VM monthly cost from cached pricing data.", "azure vm monthly cost cached prices service sku region quantity"),
+				capRec("az1", "azure__azure_query_prices", "azure_query_prices", "Calculates Azure VM monthly cost from cached pricing data.", "azure vm monthly cost cached prices service sku region quantity calculate"),
 				capRec("az2", "azure__firewall_premium_price", "firewall_premium_price", "Returns Azure firewall premium pricing.", "azure firewall premium price security tier"),
 			},
 		},
@@ -113,7 +113,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "copy template and inspect placeholders in word sow",
 			wantTop: "office__word_template_placeholders",
 			records: []models.CapabilityRecord{
-				capRec("word1", "office__word_template_placeholders", "word_template_placeholders", "Copies a Word template and inspects placeholders in a statement of work.", "office word template placeholders copy inspect sow"),
+				capRec("word1", "office__word_template_placeholders", "word_template_placeholders", "Copies a Word template and inspects placeholders in a statement of work.", "office word template placeholders copy inspect sow statement work"),
 				capRec("word2", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown input.", "office word_from_markdown markdown summary report"),
 			},
 		},
@@ -122,7 +122,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "append staffing row to office table",
 			wantTop: "office__append_staffing_row_to_office_table",
 			records: []models.CapabilityRecord{
-				capRec("office1", "office__append_staffing_row_to_office_table", "append_staffing_row_to_office_table", "Appends a staffing row to an office table.", "office staffing row table append"),
+				capRec("office1", "office__append_staffing_row_to_office_table", "append_staffing_row_to_office_table", "Appends a staffing row to an office table.", "office staffing row table append insert office"),
 				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown input.", "office word_from_markdown markdown summary report"),
 			},
 		},
@@ -131,7 +131,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "markdown report",
 			wantTop: "office__word_from_markdown",
 			records: []models.CapabilityRecord{
-				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown report content.", "office word_from_markdown markdown report summary"),
+				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown report content.", "office word_from_markdown markdown report summary document create"),
 				capRec("docs1", "docs__read_document_fully", "read_document_fully", "Reads a document end to end.", "docs read document fully content"),
 			},
 		},
@@ -149,7 +149,7 @@ func TestRegressionQuerySet(t *testing.T) {
 			query:   "read docs fully",
 			wantTop: "docs__read_document_fully",
 			records: []models.CapabilityRecord{
-				capRec("docs1", "docs__read_document_fully", "read_document_fully", "Reads documents fully and returns the full text.", "docs read document fully entire content"),
+				capRec("docs1", "docs__read_document_fully", "read_document_fully", "Reads documents fully and returns the full text.", "docs read document fully entire content text"),
 				capRec("word1", "office__word_from_markdown", "word_from_markdown", "Creates a new Word document from Markdown input.", "office word_from_markdown markdown summary report"),
 			},
 		},
