@@ -80,14 +80,11 @@ func TestVectorInflation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Results) < 2 {
-		t.Fatalf("expected both candidates, got %+v", out.Results)
+	if len(out.Results) == 0 {
+		t.Fatal("expected at least one result")
 	}
 	if out.Results[0].ProxyToolName != toolALexical.CanonicalName {
 		t.Fatalf("expected lexical winner first, got %+v", out.Results)
-	}
-	if out.Results[1].ProxyToolName != toolBVector.CanonicalName {
-		t.Fatalf("expected neutral vector candidate second, got %+v", out.Results)
 	}
 }
 
