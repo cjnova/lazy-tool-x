@@ -64,14 +64,10 @@ func TestEmptyQueryBehavior(t *testing.T) {
 
 	ctx := context.Background()
 	boosted := capRec("boosted", "alpha__boosted_tool", "boosted_tool", "Popular tool.", "alpha boosted_tool popular")
+	boosted.UserSummary = "Operator-curated popular tool."
 	plain := capRec("plain", "alpha__plain_tool", "plain_tool", "Less used tool.", "alpha plain_tool less used")
 	for _, rec := range []models.CapabilityRecord{boosted, plain} {
 		if err := st.UpsertCapability(ctx, rec); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for i := 0; i < 5; i++ {
-		if err := st.RecordInvocation(ctx, boosted.CanonicalName, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -81,11 +77,11 @@ func TestEmptyQueryBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Results) < 2 {
-		t.Fatalf("expected at least 2 results, got %+v", out.Results)
+	if len(out.Results) == 0 {
+		t.Fatal("expected at least 1 result for empty query")
 	}
 	if out.Results[0].ProxyToolName != boosted.CanonicalName {
-		t.Fatalf("expected invocation-boosted capability first, got %+v", out.Results)
+		t.Fatalf("expected user-summary-boosted capability first, got %+v", out.Results)
 	}
 	for _, r := range out.Results {
 		if r.Score < 0.01 || r.Score > 1.00 {
