@@ -140,6 +140,19 @@ func TestSearch_explainScores_keywordCapBounded(t *testing.T) {
 }
 
 func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
+	ctx := context.Background()
+	st, err := storage.OpenSQLite(filepath.Join(t.TempDir(), "vector-threshold.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+
+	idx, err := vector.NewInMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+
 	toolStrong := models.CapabilityRecord{
 		ID:               "strong",
 		Kind:             models.CapabilityKindTool,
@@ -151,6 +164,8 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		SearchText:       "strong match tool",
 		VersionHash:      "v1",
 		LastSeenAt:       time.Now().UTC(),
+		EmbeddingModel:   "test",
+		EmbeddingVector:  []float32{1, 0, 0, 0},
 		InputSchemaJSON:  "{}",
 		MetadataJSON:     "{}",
 	}
@@ -165,21 +180,48 @@ func TestSearch_explainScores_vectorThresholdBounded(t *testing.T) {
 		SearchText:       "neutral match tool",
 		VersionHash:      "v2",
 		LastSeenAt:       time.Now().UTC(),
+		EmbeddingModel:   "test",
+		EmbeddingVector:  []float32{0, 1, 0, 0},
 		InputSchemaJSON:  "{}",
 		MetadataJSON:     "{}",
 	}
 
-	wt := DefaultScoreWeights()
-	needle := "match"
-	tokens := []string{"match"}
-
-	strong, ok := scoreCandidate(&toolStrong, needle, tokens, map[string]float32{"strong": 1}, wt, models.SearchQuery{ExplainScores: true})
-	if !ok {
-		t.Fatal("expected strong candidate to score")
+	for _, rec := range []models.CapabilityRecord{toolStrong, toolNeutral} {
+		if err := st.UpsertCapability(ctx, rec); err != nil {
+			t.Fatal(err)
+		}
 	}
-	neutral, ok := scoreCandidate(&toolNeutral, needle, tokens, map[string]float32{"neutral": 0}, wt, models.SearchQuery{ExplainScores: true})
+	if err := idx.RebuildFromRecords(ctx, []models.CapabilityRecord{toolStrong, toolNeutral}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(st, idx, embeddings.Noop{}, DefaultScoreWeights(), false)
+	out, err := svc.Search(ctx, models.SearchQuery{
+		Text:          "match",
+		Limit:         5,
+		HasEmbedding:  true,
+		Embedding:     []float32{1, 0, 0, 0},
+		ExplainScores: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Results) < 2 {
+		t.Fatalf("expected both lexical matches, got %+v", out.Results)
+	}
+
+	byID := map[string]models.SearchResult{}
+	for _, r := range out.Results {
+		byID[r.CapabilityID] = r
+	}
+
+	strong, ok := byID["strong"]
 	if !ok {
-		t.Fatal("expected neutral candidate to score")
+		t.Fatal("missing strong vector result")
+	}
+	neutral, ok := byID["neutral"]
+	if !ok {
+		t.Fatal("missing neutral vector result")
 	}
 
 	if strong.ScoreBreakdown == nil {
