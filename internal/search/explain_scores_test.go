@@ -1,11 +1,16 @@
 package search
 
 import (
+	"context"
 	"math"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"lazy-tool/internal/embeddings"
+	"lazy-tool/internal/storage"
+	"lazy-tool/internal/vector"
 	"lazy-tool/pkg/models"
 )
 
