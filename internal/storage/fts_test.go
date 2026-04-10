@@ -189,3 +189,35 @@ func TestFTS_singleCharQueryReturnsEmptyMatch(t *testing.T) {
 		t.Fatalf("want only 2+ char tokens, got %q", match)
 	}
 }
+
+func TestBuildFTSMatchQuery_shortQuery_strictAND(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{name: "one token", query: "alpha", want: `"alpha"`},
+		{name: "two tokens", query: "alpha beta", want: `"alpha" AND "beta"`},
+		{name: "three tokens", query: "alpha beta gamma", want: `"alpha" AND "beta" AND "gamma"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BuildFTSMatchQuery(tt.query); got != tt.want {
+				t.Fatalf("BuildFTSMatchQuery(%q) = %q, want %q", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildFTSMatchQuery_longQuery_softened(t *testing.T) {
+	query := "create a new Word document populated with a summary of this conversation"
+	got := BuildFTSMatchQuery(query)
+	want := `("document" AND "populated" AND "conversation") OR "create" OR "new" OR "word" OR "with" OR "summary" OR "of" OR "this"`
+	if got != want {
+		t.Fatalf("BuildFTSMatchQuery(%q) = %q, want %q", query, got, want)
+	}
+	if got == `"create" AND "new" AND "word" AND "document" AND "populated" AND "with" AND "summary" AND "of" AND "this" AND "conversation"` {
+		t.Fatalf("expected softened query, got strict AND %q", got)
+	}
+}

@@ -53,23 +53,13 @@ func TestConversationalRecall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if mode != models.SearchCandidatePathSubstringFullCatalogFTSZeroRows {
-		t.Fatalf("metrics path: got %q want %q", mode, models.SearchCandidatePathSubstringFullCatalogFTSZeroRows)
+	if mode != models.SearchCandidatePathSubstringSkippedFTSHit {
+		t.Fatalf("metrics path: got %q want %q", mode, models.SearchCandidatePathSubstringSkippedFTSHit)
 	}
-	if ranked.CandidatePath != models.SearchCandidatePathSubstringFullCatalogFTSZeroRows {
-		t.Fatalf("CandidatePath: got %q want %q", ranked.CandidatePath, models.SearchCandidatePathSubstringFullCatalogFTSZeroRows)
+	if ranked.CandidatePath != models.SearchCandidatePathSubstringSkippedFTSHit {
+		t.Fatalf("CandidatePath: got %q want %q", ranked.CandidatePath, models.SearchCandidatePathSubstringSkippedFTSHit)
 	}
 	if len(ranked.Results) == 0 || ranked.Results[0].ProxyToolName != "office__word_from_markdown" {
 		t.Fatalf("expected office__word_from_markdown top hit, got %#v", ranked.Results)
-	}
-
-	// After Task 14 (FTS softening), this test should use a faster FTS path instead of full-catalog fallback.
-	switch ranked.CandidatePath {
-	case models.SearchCandidatePathSubstringFullCatalogFTSZeroRows:
-		// Current behavior: FTS AND conjunction returns zero rows, then full-catalog substring recovers the tool.
-	case models.SearchCandidatePathSubstringSkippedFTSHit:
-		// Post-fix behavior: the tool should surface via the faster FTS path.
-	default:
-		t.Fatalf("CandidatePath: got %q want %q or %q", ranked.CandidatePath, models.SearchCandidatePathSubstringFullCatalogFTSZeroRows, models.SearchCandidatePathSubstringSkippedFTSHit)
 	}
 }
