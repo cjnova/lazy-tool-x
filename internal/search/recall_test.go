@@ -47,7 +47,7 @@ func TestConversationalRecall(t *testing.T) {
 	svc := NewService(st, nil, embeddings.Noop{}, ScoreWeights{}, false)
 	ranked, err := svc.Search(ctx, models.SearchQuery{
 		Text:  "create a new Word document populated with a summary of this conversation",
-		Limit: 5,
+		Limit: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
